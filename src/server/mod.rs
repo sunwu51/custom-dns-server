@@ -4,6 +4,9 @@ use lazy_static::lazy_static;
 use trust_dns_client::{op::Header, rr::{RData, Record}};
 use trust_dns_resolver::Name;
 use trust_dns_server::{server::{RequestHandler, ResponseInfo, ResponseHandler, Request}, authority::MessageResponseBuilder};
+use anyhow::Result as AnyResult;
+
+use crate::client::forward::query_a_record;
 
 lazy_static!{
     static ref DNS_RECORDS: HashMap<String, Ipv4Addr>  = prepare_records();
@@ -21,16 +24,25 @@ impl RequestHandler for DnsHandler{
         let builder = MessageResponseBuilder::from_message_request(request);
         let header = Header::response_from_request(request.header());
         let name_str = request.query().name().to_string();
-        let name = Name::from_str(&name_str).unwrap();
-        let ipv4 = DNS_RECORDS.get(&name_str);
+        let mut ipv4 = DNS_RECORDS.get(&name_str);
+        let mut records: Vec<Record> = vec![];
 
-        let record = ipv4.map(|ip| RData::A(ip.clone()))
-            .map(|rdata| Record::from_rdata(name, 60, rdata));
+        match ipv4 {
+            Some(ip) => {
+                let rdata = RData::A(ip.clone());
+                let name = Name::from_str(&name_str).unwrap();
+                records.push(Record::from_rdata(name, 60, rdata));
+            },
+            None => {
+                let ip_list = query_a_record(&name_str).await.unwrap();
+                for ip in ip_list {
+                    let name = Name::from_str(&name_str).unwrap();
+                    records.push(Record::from_rdata(name, 60, RData::A(ip.clone())));    
+                }
+            }
+        }
 
-        let response = match record {
-            Some(ref record) => builder.build(header, vec![record], &[], &[], &[]),
-            None => builder.build(header, vec![], &[], &[], &[]),
-        };
+        let response = builder.build(header, &records, &[], &[], &[]);
 
         response_handle.send_response(response).await.unwrap()
     }
