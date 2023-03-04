@@ -1,36 +1,45 @@
-use std::net::Ipv4Addr;
-use std::str::FromStr;
+use std::{collections::HashMap, net::Ipv4Addr, str::FromStr};
 
-use tokio::runtime::Runtime;
-use trust_dns_proto::rr::{RData, RecordType};
-use trust_dns_resolver::{TokioHandle, Name, TokioAsyncResolver, config::{ResolverConfig, NameServerConfig, Protocol, ResolverOpts, NameServerConfigGroup}};
-// use trust_dns_resolver::TokioHandle;
-use trust_dns_server::{
-    authority::{Authority, LookupObject, ZoneType},
-    store::forwarder::{ForwardAuthority, ForwardConfig},
-};
+use lazy_static::lazy_static;
+use trust_dns_client::{op::Header, rr::{RData, Record}};
+use trust_dns_resolver::Name;
+use trust_dns_server::{server::{RequestHandler, ResponseInfo, ResponseHandler, Request}, authority::MessageResponseBuilder};
 
-#[test]
-fn test_lookup() {
-    let runtime = Runtime::new().expect("failed to create Tokio Runtime");
+lazy_static!{
+    static ref DNS_RECORDS: HashMap<String, Ipv4Addr>  = prepare_records();
+}
 
-    let forwarder = ForwardAuthority::try_from_config(Name::root().into(), ZoneType::Forward, &ForwardConfig {
-        name_servers: NameServerConfigGroup::google(),
-        options: None,
-    }).unwrap();
-   
-    let lookup = runtime
-        .block_on(forwarder.lookup(
-            &Name::from_str("www.example.com.").unwrap().into(),
-            RecordType::A,
-            Default::default(),
-        ))
-        .unwrap();
+pub struct DnsHandler{}
 
-    let address = lookup.iter().next().expect("no addresses returned!");
-    let address = address
-        .data()
-        .and_then(RData::as_a)
-        .expect("not an A record");
-    assert_eq!(*address, Ipv4Addr::new(93, 184, 216, 34));
+#[async_trait::async_trait]
+impl RequestHandler for DnsHandler{
+    async fn handle_request<R: ResponseHandler>(
+        &self,
+        request: &Request,
+        mut response_handle: R,
+    ) -> ResponseInfo {
+        let builder = MessageResponseBuilder::from_message_request(request);
+        let header = Header::response_from_request(request.header());
+        let name_str = request.query().name().to_string();
+        let name = Name::from_str(&name_str).unwrap();
+        let ipv4 = DNS_RECORDS.get(&name_str);
+
+        let record = ipv4.map(|ip| RData::A(ip.clone()))
+            .map(|rdata| Record::from_rdata(name, 60, rdata));
+
+        let response = match record {
+            Some(ref record) => builder.build(header, vec![record], &[], &[], &[]),
+            None => builder.build(header, vec![], &[], &[], &[]),
+        };
+
+        response_handle.send_response(response).await.unwrap()
+    }
+}
+
+pub fn prepare_records() -> HashMap<String, Ipv4Addr> {
+    let mut map = HashMap::new();
+    map.insert("www.baidu.com.".to_owned(), Ipv4Addr::from_str("1.1.1.1").unwrap());
+    map.insert("www.google.com.".to_owned(), Ipv4Addr::from_str("2.2.2.2").unwrap());
+    map.insert("www.hulu.com.".to_owned(), Ipv4Addr::from_str("3.3.3.3").unwrap());
+    map
 }
