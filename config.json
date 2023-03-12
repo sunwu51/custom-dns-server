@@ -1,0 +1,5 @@
+[
+    {"name": "www.abc.com", "type": "A", "value": "1.1.1.1"},
+    {"name": "www.bcd.com", "type": "CNAME", "value": "www.abc.com"},
+    {"name": "www.cde.com", "type": "CNAME", "value": "www.google.com"}
+]

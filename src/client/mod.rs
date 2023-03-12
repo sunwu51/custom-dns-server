@@ -1,15 +1,14 @@
 pub mod forward;
-use std::net::{ SocketAddr, Ipv4Addr};
-use std::str::FromStr;
+use anyhow::Result as AnyResult;
 use lazy_static::lazy_static;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::str::FromStr;
+use tokio::net::TcpStream as TokioTcpStream;
 use tokio::sync::Mutex;
 use trust_dns_client::client::{AsyncClient, ClientHandle};
 use trust_dns_client::proto::iocompat::AsyncIoTokioAsStd;
-use trust_dns_client::rr::{DNSClass, Name,  RecordType};
+use trust_dns_client::rr::{DNSClass, Name, RecordType};
 use trust_dns_client::tcp::TcpClientStream;
-use tokio::net::TcpStream as TokioTcpStream;
-use anyhow::Result as AnyResult;
-
 
 lazy_static! {
     static ref DNS_SERVER: SocketAddr = "8.8.8.8:53".parse().unwrap();
@@ -25,14 +24,12 @@ async fn get_dns_client() -> AnyResult<AsyncClient> {
 }
 
 pub async fn query_a_record(name: &str) -> AnyResult<Vec<Ipv4Addr>> {
-
     // init the dns_client
     let mut v = DNS_CLIENT.lock().await;
     if v.is_empty() {
         v.push(get_dns_client().await?);
     }
     let client = &mut v[0];
-
 
     // query the domain name get the ipv4 address
     // todo: not only for ipv4 (A record)
@@ -41,14 +38,14 @@ pub async fn query_a_record(name: &str) -> AnyResult<Vec<Ipv4Addr>> {
     let query = client.query(name, DNSClass::IN, record_type);
     let resp = query.await.unwrap();
     let ans = resp.answers();
-    let res: Vec<Ipv4Addr> = ans.to_vec()
+    let res: Vec<Ipv4Addr> = ans
+        .to_vec()
         .into_iter()
         .filter(|r| r.record_type() == record_type)
-        .map(|r| { r.data().unwrap().as_a().unwrap().clone()})
-    .collect();
+        .map(|r| r.data().unwrap().as_a().unwrap().clone())
+        .collect();
     AnyResult::Ok(res)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -60,14 +57,12 @@ mod tests {
             .enable_all()
             .build()
             .unwrap()
-            .block_on(
-                async {
-                    let res = query_a_record("www.example.com").await.unwrap();
-                    println!("{:?}", res);
+            .block_on(async {
+                let res = query_a_record("www.example.com").await.unwrap();
+                println!("{:?}", res);
 
-                    assert_eq!(1, res.len());
-                    assert_eq!(Ipv4Addr::from_str("93.184.216.34").unwrap(), res[0]);
-                }
-            );
+                assert_eq!(1, res.len());
+                assert_eq!(Ipv4Addr::from_str("93.184.216.34").unwrap(), res[0]);
+            });
     }
 }
