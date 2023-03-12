@@ -26,9 +26,8 @@ jobs:
       shell: bash
       run: |
           cd target/release
-          pwd
           ls
-          tar czvf ../../custom-dns-server-${{ matrix.os }}.tar.gz custom-dns-server
+          tar czvf ../../custom-dns-server-${{ matrix.os }}.tar.gz custom-dns-server ../../config.json
           cd -
     - name: Publish
       uses: softprops/action-gh-release@v1
