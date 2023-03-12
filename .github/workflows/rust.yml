@@ -28,11 +28,11 @@ jobs:
           cd target/release
           pwd
           ls
-          tar czvf ../../custm-dns-server-${{ matrix.os }}.tar.gz custm-dns-server
+          tar czvf ../../custom-dns-server-${{ matrix.os }}.tar.gz custom-dns-server
           cd -
     - name: Publish
       uses: softprops/action-gh-release@v1
       with:
-          files: 'custm-dns-server*'
+          files: 'custom-dns-server*'
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
