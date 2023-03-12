@@ -28,7 +28,7 @@ jobs:
           cd target/release
           pwd
           ls
-          tar czvf ../../custm-dns-server-${{ matrix.os }}.tar.gz decompress
+          tar czvf ../../custm-dns-server-${{ matrix.os }}.tar.gz custm-dns-server
           cd -
     - name: Publish
       uses: softprops/action-gh-release@v1
